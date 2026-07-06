@@ -172,3 +172,8 @@ class DuplicateDownloadResolution(Enum):
     CONTINUE = 0
     SKIP = 1
     ALWAYS_ASK = 2
+
+class VariableType(IntEnum):
+    TEXT = 0                 # 文本类型
+    DATETIME = 1             # 日期时间类型
+    NUMBER = 2               # 数字类型
