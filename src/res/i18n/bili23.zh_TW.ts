@@ -1438,6 +1438,21 @@ If you continue, please disable the &quot;Preallocate file space&quot; option. (
     </message>
     <message>
         <location filename="../../util/common/translator.py" line="269"/>
+        <source>Invalid Cookies format</source>
+        <translation>Cookie 格式不合法</translation>
+    </message>
+    <message>
+        <location filename="../../util/common/translator.py" line="270"/>
+        <source>SESSDATA field not found in the pasted Cookies</source>
+        <translation>貼上的 Cookie 中未找到 SESSDATA 欄位</translation>
+    </message>
+    <message>
+        <location filename="../../util/common/translator.py" line="270"/>
+        <source>Cookies are invalid or expired</source>
+        <translation>Cookie 無效或已過期</translation>
+    </message>
+    <message>
+        <location filename="../../util/common/translator.py" line="269"/>
         <source>Your account login status has expired. Please log in again.</source>
         <translation>目前帳號登入狀態已失效，請重新登入</translation>
     </message>
@@ -2082,6 +2097,34 @@ Message:
         <location filename="../../gui/dialog/login.py" line="262"/>
         <source>Resend({countdown})</source>
         <translation>重新傳送({countdown})</translation>
+    </message>
+    <message>
+        <location filename="../../gui/dialog/login.py" line="65"/>
+        <source>Log in with Cookies</source>
+        <translation>使用 Cookie 登入</translation>
+    </message>
+    <message>
+        <location filename="../../gui/dialog/login.py" line="245"/>
+        <source>Successfully logged in via Cookies</source>
+        <translation>Cookie 登入成功</translation>
+    </message>
+</context>
+<context>
+    <name>CookieLoginDialog</name>
+    <message>
+        <location filename="../../gui/dialog/login.py" line="330"/>
+        <source>Log in with Cookies</source>
+        <translation>使用 Cookie 登入</translation>
+    </message>
+    <message>
+        <location filename="../../gui/dialog/login.py" line="355"/>
+        <source>Cookies cannot be empty</source>
+        <translation>Cookie 不能為空</translation>
+    </message>
+        <message>
+        <location filename="../../gui/dialog/login.py" line="329"/>
+        <source>Support JSON format and semicolon-separated format</source>
+        <translation>支持 JSON 格式和分號分隔形式</translation>
     </message>
 </context>
 <context>
