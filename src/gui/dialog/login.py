@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QPixmap
 
 from qfluentwidgets import (
-    BodyLabel, LineEdit, HyperlinkButton
+    BodyLabel, LineEdit, HyperlinkButton, SubtitleLabel
 )
 
 from gui.component.widget import IndeterminateProgressPushButton, CidComboBox, SectionLabel, ImageLabel
@@ -14,6 +14,7 @@ from util.common.signal_bus import signal_bus
 from util.auth.sms import SMS, SMSInfo
 from util.auth.captcha import Captcha
 from util.auth.qrcode import QRCode
+from util.auth.cookie_login import CookieLogin
 
 class LoginDialog(DialogBase):
     def __init__(self, parent = None):
@@ -60,6 +61,9 @@ class LoginDialog(DialogBase):
         self.sms_login_btn = IndeterminateProgressPushButton(self.tr("Log In"), self)
         self.sms_login_btn.setFixedWidth(175)
 
+        self.cookie_login_link = HyperlinkButton(self)
+        self.cookie_login_link.setText(self.tr("Log in with Cookies"))
+
         self.send_verification_btn = HyperlinkButton(self)
         self.send_verification_btn.setText(self.tr("Get Code"))
         self.send_verification_btn.setMinimumWidth(100)
@@ -80,6 +84,8 @@ class LoginDialog(DialogBase):
         sms_layout.addLayout(sms_bottom_layout)
         sms_layout.addSpacing(15)
         sms_layout.addWidget(self.sms_login_btn, alignment = Qt.AlignmentFlag.AlignHCenter)
+        sms_layout.addSpacing(5)
+        sms_layout.addWidget(self.cookie_login_link, alignment = Qt.AlignmentFlag.AlignHCenter)
         sms_layout.addStretch()
 
         login_layout = QHBoxLayout()
@@ -111,6 +117,7 @@ class LoginDialog(DialogBase):
     def connect_signals(self):
         self.send_verification_btn.clicked.connect(self.on_send_verification)
         self.sms_login_btn.clicked.connect(self.on_sms_login)
+        self.cookie_login_link.clicked.connect(self.on_cookie_login)
 
         self.sms_countdown_timer.timeout.connect(self.on_update_sms_countdown)
 
@@ -216,6 +223,12 @@ class LoginDialog(DialogBase):
 
         self.sms_login_btn.setIndeterminateState(False)
 
+    def on_cookie_login(self):
+        dialog = CookieLoginDialog(self)
+
+        if dialog.exec():
+            self.login_success(self.tr("Successfully logged in via Cookies"))
+
     def on_qrcode_update(self, pixmap: QPixmap):
         if self._closing:
             return
@@ -271,10 +284,10 @@ class LoginDialog(DialogBase):
             target.setFocus()
 
             return False
-        
+
         return True
-    
-    def show_error_toast_message(self, message: str):        
+
+    def show_error_toast_message(self, message: str):
         if self._closing:
             return
 
@@ -294,3 +307,87 @@ class LoginDialog(DialogBase):
 
         # 延迟关闭对话框，确保用户能看到登录成功的提示
         self.close_timer.start(300)
+
+class CookieLoginDialog(DialogBase):
+    def __init__(self, parent = None):
+        super().__init__(parent)
+
+        self._closing = False
+        self._verifying = False
+
+        self.init_utils()
+
+        self.init_UI()
+
+    def init_UI(self):
+        self.caption_lab = SubtitleLabel(self.tr("Log in with Cookies"), self)
+
+        self.cookie_box = LineEdit(self)
+        self.cookie_box.setPlaceholderText("SESSDATA=xxx;bili_jct=xxx;DedeUserID=xxx;DedeUserID__ckMd5=xxx")
+        self.cookie_box.setClearButtonEnabled(True)
+    
+        cookie_label = BodyLabel(self.tr("Support JSON format and semicolon-separated format"), self)
+
+        self.viewLayout.addWidget(self.caption_lab)
+        self.viewLayout.addSpacing(10)
+        self.viewLayout.addWidget(self.cookie_box)
+        self.viewLayout.addWidget(cookie_label)
+        
+
+        self.adjust_widget_size()
+
+    def init_utils(self):
+        self.cookie_login = CookieLogin(self)
+        self.cookie_login.login_success.connect(self.on_login_success)
+        self.cookie_login.error.connect(self.on_login_error)
+
+    def validate(self):
+        if self._verifying:
+            return False
+
+        if self.cookie_box.text().strip() == "":
+            self.cookie_box.setError(True)
+            self.cookie_box.setFocus()
+
+            self.show_top_toast_message(ToastNotificationCategory.ERROR, "", self.tr("Cookies cannot be empty"))
+
+            return False
+
+        # 校验 Cookie 有效性，校验通过后再关闭对话框
+        self._verifying = True
+        self.yesButton.setEnabled(False)
+
+        self.cookie_login.login(self.cookie_box.text())
+
+        return False
+
+    def on_login_success(self):
+        if self._closing:
+            return
+
+        self.accept()
+
+    def on_login_error(self, message: str):
+        if self._closing:
+            return
+
+        self._verifying = False
+        self.yesButton.setEnabled(True)
+
+        self.cookie_box.setError(True)
+        self.cookie_box.setFocus()
+
+        self.show_top_toast_message(ToastNotificationCategory.ERROR, "", message)
+
+    def on_dialog_close(self):
+        # _closing 置位后，晚到的 login_success / error 信号会被槽函数忽略
+        self._closing = True
+
+        self.cookie_login.cleanup()
+
+    def adjust_widget_size(self):
+        parent_size: QSize = self.parent().size()
+
+        width = parent_size.width() * 0.5
+
+        self.widget.setMinimumWidth(max(500, width))
