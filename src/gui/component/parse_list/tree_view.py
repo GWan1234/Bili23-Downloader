@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QModelIndex
+from PySide6.QtCore import Qt, QModelIndex, QTimer
 
 from qfluentwidgets import TreeView, RoundMenu, Action, FluentIcon, isDarkTheme, setCustomStyleSheet
 
@@ -22,6 +22,9 @@ class ParseTreeView(TreeView):
         self.main_window = main_window
 
         self._model = ParseModel(parent = self)
+        self._expand_timer = QTimer(self)
+        self._expand_timer.setSingleShot(True)
+        self._expand_timer.timeout.connect(self.expandAll)
 
         self.setModel(self._model)
         self.setUniformRowHeights(True)
@@ -40,7 +43,7 @@ class ParseTreeView(TreeView):
             self.setColumnWidth(index, entry["width"])
 
         # 重新展开
-        self.expandAll()
+        self._schedule_expand_all()
 
         header = self.header()
         header.setStretchLastSection(False)
@@ -50,10 +53,14 @@ class ParseTreeView(TreeView):
         self._model.root_node = root_node
         self._model.endResetModel()
 
-        self.expandAll()
+        self._schedule_expand_all()
 
         # 根据传入的剧集数据定位到对应的项目
         self.locate_to_item_by_episode_data(current_episode_data)
+
+    def _schedule_expand_all(self):
+        if not self._expand_timer.isActive():
+            self._expand_timer.start(0)
 
     def clear_tree(self):
         invisible_root = TreeItem({"number": "", "title": ""})

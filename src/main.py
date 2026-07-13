@@ -1,6 +1,6 @@
 # --------- System Version Check ---------
 
-# 低于 Windows 10 1809 的系统不支持 QT 6.11
+# 低于 Windows 10 1809 的系统不支持 QT 6
 
 import platform
 import ctypes
@@ -39,11 +39,15 @@ if platform.system() == "Windows" :
     try:
         from PySide6 import __version_info__
 
+        qt_version = __version_info__
+
     except ImportError:
         qt_version = (0, 0, 0, "", "")
     
-    # 当系统版本低于 Windows 10 1809 且 QT 版本为 6.11 时，显示不支持的提示并退出程序
-    if (major, minor, build) < (10, 0, 17763) and qt_version == (6, 11, 0, "", ""):
+    # 当系统版本低于 Windows 10 1809 且 QT 版本为 6.x 时，显示不支持的提示并退出程序
+    # 对于 Win7 兼容版，qt_version 中已经带有 compatible 字符串，跳过检测
+
+    if (major, minor, build) < (10, 0, 17763) and qt_version[0] == 6 and qt_version[3] != "compatible":
         lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
         lang_tag = locale.windows_locale.get(lang_id, "en_US")
 

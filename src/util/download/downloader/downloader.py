@@ -368,11 +368,23 @@ class Downloader(QObject):
 
     def start_download(self):
         try:
-            self.start_worker()
             self.start_timer()
+            # 磁盘检查、预分配和启动分片属于准备工作，不能阻塞 GUI 事件循环。
+            GlobalThreadPoolTask.run_func(self._start_worker_in_background)
         
         except Exception as e:
             self.on_download_error(str(e))
+
+    def _start_worker_in_background(self):
+        try:
+            self.start_worker()
+        except Exception as e:
+            QMetaObject.invokeMethod(
+                self,
+                "on_download_error",
+                Qt.ConnectionType.QueuedConnection,
+                Q_ARG(str, str(e))
+            )
 
     def start_worker(self):
         if not self.task_info.Download.queue:
@@ -417,7 +429,7 @@ class Downloader(QObject):
             )
             self.thread_pool.start(worker)
 
-        task_manager.update(self.task_info)
+        task_manager.update_async(self.task_info)
 
     def start_merge(self):
         self.task_info.Download.status = DownloadStatus.MERGING
@@ -490,7 +502,7 @@ class Downloader(QObject):
             total = file_info.get("total_chunks", 1)
             current_progress = int((file_info.get("finished_chunks", 0) / total) * 100) if total > 0 else 100
 
-        task_manager.update(self.task_info)
+        task_manager.update_async(self.task_info)
 
         if current_progress >= 100:
             if file_key in self.task_info.Download.queue:
@@ -586,7 +598,7 @@ class Downloader(QObject):
         self.session.close()
         self.speed_timer.stop()
 
-        task_manager.update(self.task_info)
+        task_manager.update_async(self.task_info)
         signal_bus.download.auto_manage_concurrent_downloads.emit()
 
     def on_chunk_start(self):
@@ -640,7 +652,7 @@ class Downloader(QObject):
     
     def update_item(self, task_info: TaskInfo):
         signal_bus.download.update_downloading_item.emit(task_info)
-        task_manager.update(self.task_info)
+        task_manager.update_async(self.task_info)
 
     def _check_disk_space(self, path: Path, file_size: int):
         if not Directory.has_enough_space(path.parent, file_size):
@@ -656,4 +668,3 @@ class Downloader(QObject):
             else:
                 # 关闭预分配时，仅创建空文件占位
                 File.create_placeholder(path)
-    

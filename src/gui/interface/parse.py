@@ -25,6 +25,7 @@ from util.parse.preview.info import PreviewerInfo
 
 from util.misc.history import history_manager
 from util.thread.async_ import AsyncTask
+from util.thread.pool import GlobalThreadPoolTask
 
 from collections import deque
 from threading import Event
@@ -473,7 +474,7 @@ class ParseInterface(ParseBase):
         self.parse_list.update_tree(root_node, current_episode_data)
 
         if config.get(config.parse_history):
-            history_manager.add_history(title, self.url_box.text(), category_name)
+            GlobalThreadPoolTask.run_func(history_manager.add_history, title, self.url_box.text(), category_name)
 
     def on_download(self):
         # 只有在获取媒体信息成功时才允许下载

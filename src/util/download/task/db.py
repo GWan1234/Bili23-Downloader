@@ -101,6 +101,11 @@ class TaskDatabase(Database):
             UPDATE download_task SET data = ? WHERE task_id = ?
         """, (json_dumps(task_info.to_dict()), task_info.Basic.task_id))
 
+    def update_task_json(self, task_id: str, data: str):
+        self.execute("""
+            UPDATE download_task SET data = ? WHERE task_id = ?
+        """, (data, task_id))
+
     def delete_task(self, task_id: str, completed: bool = False):
         if completed:
             self.execute("""

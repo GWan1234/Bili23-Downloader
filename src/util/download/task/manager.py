@@ -20,6 +20,7 @@ from threading import Event, Lock, Timer
 from pathlib import Path
 from typing import List
 from uuid import uuid4
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import hashlib
 import re
@@ -31,6 +32,10 @@ class TaskManager:
         self.db_manager = TaskDatabase()
         self._add_to_queue_toast_shown = False
         self._add_to_queue_toast_lock = Lock()
+        self._update_lock = Lock()
+        self._pending_updates = {}
+        self._update_flush_scheduled = False
+        self._update_executor = ThreadPoolExecutor(max_workers = 1, thread_name_prefix = "task-db")
 
         signal_bus.download.create_task.connect(self._create_async)
 
@@ -237,6 +242,37 @@ class TaskManager:
 
     def update(self, task_info: TaskInfo):
         self.db_manager.update_task(task_info)
+
+    def update_async(self, task_info: TaskInfo):
+        # 高频进度更新只保留每个任务最新快照，并由单独线程串行写入数据库。
+        task_id = task_info.Basic.task_id
+        data = json_dumps(task_info.to_dict())
+
+        with self._update_lock:
+            self._pending_updates[task_id] = (task_id, data)
+
+            if self._update_flush_scheduled:
+                return
+
+            self._update_flush_scheduled = True
+
+        self._update_executor.submit(self._flush_updates)
+
+    def _flush_updates(self):
+        while True:
+            with self._update_lock:
+                if not self._pending_updates:
+                    self._update_flush_scheduled = False
+                    return
+
+                updates = list(self._pending_updates.values())
+                self._pending_updates.clear()
+
+            for task_id, data in updates:
+                try:
+                    self.db_manager.update_task_json(task_id, data)
+                except Exception:
+                    logger.exception("异步保存下载任务失败：%s", task_id)
 
     def delete(self, task_info: TaskInfo, completed: bool = False):
         self.db_manager.delete_task(task_info.Basic.task_id, completed)
