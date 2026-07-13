@@ -116,6 +116,15 @@ class FileNameFormatter:
                 return entry["rule"]
 
     def get_variable_data_from_task_info(self, task_info: TaskInfo):
+        number = task_info.Episode.number
+
+        try:
+            number = int(number)
+        except (TypeError, ValueError):
+            # “使用解析列表序号”时，某些分类的序号是文本标签。
+            # 普通命名规则仍应允许这些条目创建下载任务。
+            pass
+
         return {
             "pub_time": Time.from_timestamp(task_info.Episode.pubtime),
             "pub_ts": task_info.Episode.pubtime,
@@ -125,7 +134,7 @@ class FileNameFormatter:
             "fav_ts": task_info.Episode.favtime,
             "last_watched_time": Time.from_timestamp(task_info.Episode.viewtime),
             "last_watched_ts": task_info.Episode.viewtime,
-            "number": int(task_info.Episode.number),
+            "number": number,
             "uploader": task_info.Episode.uploader,
             "uploader_uid": task_info.Episode.uploader_uid,
             "video_quality": task_info.Episode.video_quality,

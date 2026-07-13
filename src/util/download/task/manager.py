@@ -197,23 +197,34 @@ class TaskManager:
         task_info_list = []
 
         for episode_info in episode_info_list:
-            # 判断是否需要重新解析
-            if self.__check_reparse_needed(episode_info, show_toast):
-                continue
+            try:
+                # 判断是否需要重新解析
+                if self.__check_reparse_needed(episode_info, show_toast):
+                    continue
 
-            # 判断是否重复下载
-            if self._check_duplicate(episode_info):
-                continue
+                # 判断是否重复下载
+                if self._check_duplicate(episode_info):
+                    continue
 
-            # 先判断重复下载，再分配编号
-            number = self.__get_number(episode_info)
+                # 先判断重复下载，再分配编号
+                number = self.__get_number(episode_info)
 
-            task_info = self.__episode_info_to_task_info(episode_info, number)
+                task_info = self.__episode_info_to_task_info(episode_info, number)
 
-            task_info_list.append(task_info)
+                task_info_list.append(task_info)
 
-            # 全局起始编号自增
-            config.global_starting_number += 1
+                # 全局起始编号自增
+                config.global_starting_number += 1
+
+            except Exception as error:
+                title = episode_info.get("title", "")
+                logger.exception("创建下载任务失败：%s", title)
+
+                signal_bus.toast.show_long_message.emit(
+                    ToastNotificationCategory.ERROR,
+                    Translator.ERROR_MESSAGES("DOWNLOAD_FAILED"),
+                    f"{title}\n\n{error}"
+                )
 
         if task_info_list:
             # 存储到数据库，并添加到下载列表
