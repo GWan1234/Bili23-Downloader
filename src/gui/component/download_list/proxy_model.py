@@ -17,6 +17,8 @@ class DownloadListProxyModel(QSortFilterProxyModel):
 
         self._filter_text = ""
         self._status_filter = None
+        self._filter_refresh_pending = False
+        self._sort_refresh_pending = False
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
@@ -61,21 +63,24 @@ class DownloadListProxyModel(QSortFilterProxyModel):
 
         return self._matchesFilter(task_info)
 
-    def _scheduleRefresh(self):
+    def _scheduleRefresh(self, refresh_filter = False, refresh_sort = False):
+        self._filter_refresh_pending |= refresh_filter
+        self._sort_refresh_pending |= refresh_sort
+
         if not self._refresh_timer.isActive():
             self._refresh_timer.start(50)
 
-    def _needsRefreshForUpdate(self):
-        if self._filter_text or self._status_filter:
-            return True
-
-        return self._sort_by_key in {"file_size", "progress"}
-
     def _flushPendingRefresh(self):
-        if self._filter_text or self._status_filter:
+        refresh_filter = self._filter_refresh_pending
+        refresh_sort = self._sort_refresh_pending
+
+        self._filter_refresh_pending = False
+        self._sort_refresh_pending = False
+
+        if refresh_filter:
             self.invalidateFilter()
 
-        if self._sorting and self._sort_by_key:
+        if refresh_sort and self._sorting and self._sort_by_key:
             order = Qt.SortOrder.AscendingOrder if self._ascending else Qt.SortOrder.DescendingOrder
             self.sort(0, order)
 
@@ -251,8 +256,11 @@ class DownloadListProxyModel(QSortFilterProxyModel):
             model_index = self.index(row, 0)
             self.dataChanged.emit(model_index, model_index)
 
-        if self._needsRefreshForUpdate():
-            self._scheduleRefresh()
+        if self._filter_text or self._status_filter:
+            self._scheduleRefresh(refresh_filter = True)
+
+        if self._sort_by_key in {"file_size", "progress"}:
+            self._scheduleRefresh(refresh_sort = True)
 
     def isRowInVisibleArea(self, row: int):
         view: QAbstractItemView = self.parent()
@@ -285,13 +293,13 @@ class DownloadListProxyModel(QSortFilterProxyModel):
 
     def setFilterText(self, text: str):
         self._filter_text = text.strip()
-        self._scheduleRefresh()
+        self._scheduleRefresh(refresh_filter = True)
 
     def setStatusFilter(self, statuses):
         self._status_filter = set(statuses) if statuses else None
-        self._scheduleRefresh()
+        self._scheduleRefresh(refresh_filter = True)
 
     def clearFilter(self):
         self._filter_text = ""
         self._status_filter = None
-        self._scheduleRefresh()
+        self._scheduleRefresh(refresh_filter = True)

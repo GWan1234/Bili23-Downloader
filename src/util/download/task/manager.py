@@ -241,7 +241,7 @@ class TaskManager:
         return task_info_list
 
     def update(self, task_info: TaskInfo):
-        self.db_manager.update_task(task_info)
+        self.update_async(task_info)
 
     def update_async(self, task_info: TaskInfo):
         # 高频进度更新只保留每个任务最新快照，并由单独线程串行写入数据库。
@@ -257,6 +257,10 @@ class TaskManager:
             self._update_flush_scheduled = True
 
         self._update_executor.submit(self._flush_updates)
+
+    def _wait_for_pending_updates(self):
+        # 结构性操作前等待已提交的快照完成，避免旧状态覆盖新记录。
+        self._update_executor.submit(lambda: None).result()
 
     def _flush_updates(self):
         while True:
@@ -275,6 +279,7 @@ class TaskManager:
                     logger.exception("异步保存下载任务失败：%s", task_id)
 
     def delete(self, task_info: TaskInfo, completed: bool = False):
+        self._wait_for_pending_updates()
         self.db_manager.delete_task(task_info.Basic.task_id, completed)
 
     def cancel(self, task_info: TaskInfo):
@@ -303,6 +308,7 @@ class TaskManager:
         self._removeTemporaryFiles(task_info)
 
     def recreate(self, task_info: TaskInfo):
+        self._wait_for_pending_updates()
         self.db_manager.delete_task(task_info.Basic.task_id, completed = True)
         self.db_manager.add_tasks([task_info])
 

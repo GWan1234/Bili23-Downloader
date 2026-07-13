@@ -8,6 +8,7 @@ from .time import Time
 
 from pathlib import Path
 from typing import List
+import re
 import logging
 
 logger = logging.getLogger(__name__)
@@ -50,24 +51,36 @@ class FileNameFormatter:
             if self.attribute:
                 self.rule = self.get_special_rule()
 
-            return self.__normalize_path(self.rule.format(**self.variable_data))
+            safe_variable_data = {
+                name: self.__sanitize_component(value)
+                for name, value in self.variable_data.items()
+            }
+
+            return self.__normalize_path(self.rule.format(**safe_variable_data))
         
         except Exception as e:
             logger.exception(f"格式化文件名时发生错误")
 
             return None
 
+    @staticmethod
+    def __sanitize_component(value):
+        if not isinstance(value, str):
+            return value
+
+        return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", value)
+
     def __normalize_path(self, path_str: str):
         if not path_str:
             return path_str
         
-        path_str = path_str.removeprefix("/").removeprefix("\\")
+        path_str = path_str.lstrip("/\\")
 
         path = Path(path_str)
         normalized_parts = []
 
         for part in path.parts:
-            cleaned_part = part.strip(" .")
+            cleaned_part = part.lstrip("/\\").strip(" .")
 
             if cleaned_part:
                 normalized_parts.append(cleaned_part)

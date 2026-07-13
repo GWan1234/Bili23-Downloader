@@ -101,7 +101,7 @@ class ChunkWorker(QRunnable):
         errno.EPIPE,
     }
 
-    def __init__(self, session: httpx.Client, file_key: str, chunk_index: int, chunk_range: tuple[int, int], file_path: Path, url: str, referer: str, task_info: TaskInfo, stop_event: Event, lock: Lock, token_bucket: TokenBucket, parent=None, on_chunk_start=None, on_chunk_end=None):
+    def __init__(self, session: httpx.Client, file_key: str, chunk_index: int, chunk_range: tuple[int, int], file_path: Path, url: str, referer: str, task_info: TaskInfo, stop_event: Event, lock: Lock, token_bucket: TokenBucket, generation: int, parent=None, on_chunk_start=None, on_chunk_end=None):
         super().__init__()
         self.session = session
         self.file_key = file_key
@@ -115,6 +115,7 @@ class ChunkWorker(QRunnable):
         self.stop_event = stop_event
         self.lock = lock
         self.token_bucket = token_bucket
+        self.generation = generation
         self.parent = parent
         self.on_chunk_start = on_chunk_start
         self.on_chunk_end = on_chunk_end
@@ -179,7 +180,7 @@ class ChunkWorker(QRunnable):
         self._invoke_download_error(message)
 
     def run(self):
-        if self.stop_event.is_set():
+        if self.stop_event.is_set() or not self.parent.is_generation_active(self.generation):
             return
         
         if self.on_chunk_start:
@@ -191,7 +192,11 @@ class ChunkWorker(QRunnable):
 
         attempt = 0
 
-        while not self.stop_event.is_set() and attempt < self.max_retries:
+        while (
+            not self.stop_event.is_set()
+            and self.parent.is_generation_active(self.generation)
+            and attempt < self.max_retries
+        ):
             downloaded = 0
             try:
                 with open(self.file_path, "r+b") as f:
@@ -204,7 +209,10 @@ class ChunkWorker(QRunnable):
                         expected_size = int(response.headers.get("Content-Length", self.chunk_size))
                         
                         for chunk in response.iter_bytes(chunk_size = 8192):
-                            if self.stop_event.is_set():
+                            if (
+                                self.stop_event.is_set()
+                                or not self.parent.is_generation_active(self.generation)
+                            ):
                                 break
                             
                             if chunk:
@@ -219,7 +227,10 @@ class ChunkWorker(QRunnable):
                                     self.task_info.Download.downloaded_size += chunk_len
                                     
                 # 如果中途被停止，跳出循环退出
-                if self.stop_event.is_set():
+                if (
+                    self.stop_event.is_set()
+                    or not self.parent.is_generation_active(self.generation)
+                ):
                     break
                     
                 # 检查区块是否真下载到了服务端承诺的大小（原为严格检测 self.chunk_size）
@@ -282,6 +293,9 @@ class Downloader(QObject):
         self.last_sampled_size = 0
         self.wait_flag = False
         self.wait_callback = None
+        self.start_worker_lock = Lock()
+        self.start_worker_pending = False
+        self.download_generation = 0
         
         self._completion_triggered = False
         self._download_error_triggered = False
@@ -369,15 +383,30 @@ class Downloader(QObject):
     def start_download(self):
         try:
             self.start_timer()
+
+            with self.start_worker_lock:
+                if self.start_worker_pending:
+                    return
+
+                self.start_worker_pending = True
+                self.download_generation += 1
+                generation = self.download_generation
+
             # 磁盘检查、预分配和启动分片属于准备工作，不能阻塞 GUI 事件循环。
-            GlobalThreadPoolTask.run_func(self._start_worker_in_background)
+            GlobalThreadPoolTask.run_func(
+                self._start_worker_in_background,
+                generation
+            )
         
         except Exception as e:
             self.on_download_error(str(e))
 
-    def _start_worker_in_background(self):
+    def _start_worker_in_background(self, generation: int):
         try:
-            self.start_worker()
+            if not self.is_generation_active(generation) or self._stop_event.is_set():
+                return
+
+            self.start_worker(generation)
         except Exception as e:
             QMetaObject.invokeMethod(
                 self,
@@ -385,9 +414,19 @@ class Downloader(QObject):
                 Qt.ConnectionType.QueuedConnection,
                 Q_ARG(str, str(e))
             )
+        finally:
+            with self.start_worker_lock:
+                self.start_worker_pending = False
 
-    def start_worker(self):
-        if not self.task_info.Download.queue:
+    def is_generation_active(self, generation: int):
+        return generation == self.download_generation
+
+    def start_worker(self, generation: int):
+        if (
+            not self.task_info.Download.queue
+            or not self.is_generation_active(generation)
+            or self._stop_event.is_set()
+        ):
             return
             
         file_key = self.task_info.Download.queue[0]
@@ -410,6 +449,12 @@ class Downloader(QObject):
 
         # 对于每个区块，启动一个下载线程。区块下载完成后会从 chunk_list 中移除，直到全部完成。
         for chunk_index in chunk_list:
+            if (
+                not self.is_generation_active(generation)
+                or self._stop_event.is_set()
+            ):
+                break
+
             chunk_range = self.calc_chunk_range(chunk_index, self.chunk_size, file_size)
             worker = ChunkWorker(
                 session = self.session,
@@ -423,6 +468,7 @@ class Downloader(QObject):
                 stop_event = self._stop_event,
                 lock = self.update_lock,
                 token_bucket = self.token_bucket,
+                generation = generation,
                 parent = self,
                 on_chunk_start = self.on_chunk_start,
                 on_chunk_end = self.on_chunk_end
@@ -437,6 +483,7 @@ class Downloader(QObject):
         merge_worker.start()
 
     def pause(self):
+        self.download_generation += 1
         self.task_info.Download.status = DownloadStatus.PAUSED
         self._stop_event.set()
         self.speed_timer.stop()
