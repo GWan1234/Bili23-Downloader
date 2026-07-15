@@ -23,7 +23,7 @@ LOG_PATTERN = re.compile(
 
 class LogViewerDialog(FluentWidget):
     def __init__(self, parent = None):
-        super().__init__(parent = parent)
+        super().__init__(parent_window = parent)
 
         self.setWindowTitle(self.tr("Logs"))
         self.setMinimumSize(800, 520)
