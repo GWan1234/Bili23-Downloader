@@ -23,19 +23,19 @@ if platform.system() == "Windows" :
             case "zh_CN" | "zh_SG":
                 return (
                     "不支持的 Windows 版本",
-                    "本程序需要 Windows 10 1809 (Build 17763) 及更高版本才能运行。"
+                    "本程序需要 Windows 10 1809 (Build 17763) 及更高版本才能运行。\n请升级系统或使用 Windows 7 兼容版。"
                 )
 
             case "zh_TW" | "zh_HK" | "zh_MO":
                 return (
                     "不支援的 Windows 版本",
-                    "本程式需要 Windows 10 1809 (Build 17763) 及更高版本才能執行。"
+                    "本程式需要 Windows 10 1809 (Build 17763) 及更高版本才能執行。\n請升級系統或使用 Windows 7 相容版。"
                 )
 
             case _:
                 return (
                     "Unsupported Windows Version",
-                    "This application requires Windows 10 1809 (Build 17763) or later to run."
+                    "This application requires Windows 10 1809 (Build 17763) or later to run.\nPlease upgrade your system or use the Windows 7 compatible version."
                 )
 
     version = platform.version().split(".")
