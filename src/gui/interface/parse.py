@@ -211,6 +211,8 @@ class ParseBase(QFrame):
             self.start_progress_parse_worker(dialog.payload)
 
     def show_auto_parse_teaching_tip(self: "ParseInterface"):
+        config.set(config.auto_parse_teaching_tip_shown, True)
+
         TeachingTip.create(
             target = self.segmented_widget.pager_widget.menu_btn,
             title = self.tr("Auto-parse Pagination"),
