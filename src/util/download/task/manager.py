@@ -228,7 +228,19 @@ class TaskManager:
 
         if task_info_list:
             # 存储到数据库，并添加到下载列表
-            self.db_manager.add_tasks(task_info_list)
+            try:
+                self.db_manager.add_tasks(task_info_list)
+
+            except Exception as error:
+                logger.exception("保存下载任务失败")
+
+                signal_bus.toast.show_long_message.emit(
+                    ToastNotificationCategory.ERROR,
+                    Translator.ERROR_MESSAGES("DOWNLOAD_FAILED"),
+                    str(error)
+                )
+
+                return
 
             signal_bus.download.add_to_downloading_list.emit(task_info_list)
             signal_bus.download.auto_manage_concurrent_downloads.emit()

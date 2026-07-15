@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List
 import hashlib
 import logging
+import sqlite3
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +23,27 @@ class TaskDatabase(Database):
         self._check_should_upgrade()
 
     def _check_should_upgrade(self):
-        if config.should_upgrade_config:
+        # 配置版本与任务数据库版本并不等价。始终检查实际表结构，
+        # 避免配置升级成功但数据库迁移失败后永久跳过迁移。
+        if self._needs_upgrade():
+            logger.info("检测到旧版下载任务数据库，正在进行升级")
             self._upgrade()
 
-            config.should_upgrade_config = False
+    def _needs_upgrade(self):
+        required_columns = {"task_id", "hash_id", "cover_id", "title", "data"}
+
+        for table_name in ("download_task", "completed_task"):
+            column_names = self._get_table_columns(table_name)
+
+            if not required_columns.issubset(column_names):
+                return True
+
+        return False
+
+    def _get_table_columns(self, table_name: str):
+        result = self.query(f"PRAGMA table_info({table_name});")
+
+        return {row[1] for row in result}
 
     def check_and_create_table(self):
         self.execute_script("""
@@ -50,9 +68,14 @@ class TaskDatabase(Database):
                 "data"	TEXT,
                 PRIMARY KEY("id" AUTOINCREMENT)
             );
-            CREATE INDEX IF NOT EXISTS "idx_download_task_hash_id" ON "download_task" ("hash_id");
-            CREATE INDEX IF NOT EXISTS "idx_completed_task_hash_id" ON "completed_task" ("hash_id");
             """)
+
+        # 旧版表可能还没有 hash_id，不能在迁移前直接创建索引。
+        if "hash_id" in self._get_table_columns("download_task") and "hash_id" in self._get_table_columns("completed_task"):
+            self.execute_script("""
+                CREATE INDEX IF NOT EXISTS "idx_download_task_hash_id" ON "download_task" ("hash_id");
+                CREATE INDEX IF NOT EXISTS "idx_completed_task_hash_id" ON "completed_task" ("hash_id");
+                """)
         
     def query_tasks(self, completed: bool = False):
         if completed:
@@ -139,14 +162,7 @@ class TaskDatabase(Database):
 
             return _task_info_list
 
-        # 检查数据库中是否存在 hash_id 列，如果不存在则进行升级
-        result = self.query("""
-            PRAGMA table_info(download_task);
-        """)
-
-        column_names = [row[1] for row in result]
-
-        if "hash_id" in column_names:
+        if not self._needs_upgrade():
             logger.info("数据库已是最新版本，无需升级")
             return
 
@@ -154,17 +170,77 @@ class TaskDatabase(Database):
         download_tasks = self.query_tasks(completed = False)
         completed_tasks = self.query_tasks(completed = True)
 
-        # 删除原有表
-        self.execute_script("""
-            DROP TABLE IF EXISTS download_task;
-            DROP TABLE IF EXISTS completed_task;
-        """)
+        download_task_list = _to_task_list(download_tasks)
+        completed_task_list = _to_task_list(completed_tasks)
 
-        # 重新创建表
-        self.check_and_create_table()
+        def _task_records(task_info_list: List[TaskInfo], completed: bool):
+            records = []
 
-        self.add_tasks(_to_task_list(download_tasks), completed = False)
-        self.add_tasks(_to_task_list(completed_tasks), completed = True)
+            for task_info in task_info_list:
+                timestamp = task_info.Basic.completed_time if completed else task_info.Basic.created_time
+
+                if not timestamp:
+                    timestamp = get_timestamp()
+
+                records.append((
+                    task_info.Basic.task_id,
+                    self._calc_hash_id(task_info),
+                    task_info.Basic.cover_id,
+                    task_info.Basic.show_title,
+                    timestamp,
+                    json_dumps(task_info.to_dict())
+                ))
+
+            return records
+
+        download_records = _task_records(download_task_list, completed = False)
+        completed_records = _task_records(completed_task_list, completed = True)
+
+        # 在同一个事务中重建表，避免迁移中途失败后留下空表或半成品表。
+        with sqlite3.connect(self.path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("BEGIN")
+
+            cursor.execute("DROP TABLE IF EXISTS download_task")
+            cursor.execute("DROP TABLE IF EXISTS completed_task")
+
+            cursor.execute("""
+                CREATE TABLE download_task (
+                    id INTEGER UNIQUE,
+                    task_id TEXT UNIQUE,
+                    hash_id TEXT,
+                    cover_id TEXT,
+                    title TEXT,
+                    created_time INTEGER,
+                    data TEXT,
+                    PRIMARY KEY(id AUTOINCREMENT)
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE completed_task (
+                    id INTEGER UNIQUE,
+                    task_id TEXT UNIQUE,
+                    hash_id TEXT,
+                    cover_id TEXT,
+                    title TEXT,
+                    completed_time INTEGER,
+                    data TEXT,
+                    PRIMARY KEY(id AUTOINCREMENT)
+                )
+            """)
+            cursor.execute("CREATE INDEX idx_download_task_hash_id ON download_task (hash_id)")
+            cursor.execute("CREATE INDEX idx_completed_task_hash_id ON completed_task (hash_id)")
+
+            cursor.executemany("""
+                INSERT INTO download_task (task_id, hash_id, cover_id, title, created_time, data)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, download_records)
+            cursor.executemany("""
+                INSERT INTO completed_task (task_id, hash_id, cover_id, title, completed_time, data)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, completed_records)
+
+            conn.commit()
 
     def _calc_hash_id(self, task_info: TaskInfo):
         # 根据 task_info 计算 hash_id

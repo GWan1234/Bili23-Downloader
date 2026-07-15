@@ -290,8 +290,8 @@ class DefaultValue:
 class APPConfig(QConfig):
     # APP
     app_name = "Bili23 Downloader"
-    app_version = "2.10.5"
-    app_comparable_version = "2.10.5"
+    app_version = "2.11.0"
+    app_comparable_version = "2.11.0"
     app_config_version = 2100
     config_version = ConfigItem("Application", "config_version", app_config_version)
 
@@ -399,7 +399,6 @@ class APPConfig(QConfig):
     is_expired = False
 
     # Application
-    should_upgrade_config = False
     accepted_terms = ConfigItem("Application", "accepted_terms", False, BoolValidator())
     skip_version = ConfigItem("Application", "skip_version", "")
 
@@ -485,7 +484,5 @@ need_patch, config_version = check_need_patch()
 
 if need_patch:
     logger.info("检测到旧版本配置文件，正在进行修补")
-
-    config.should_upgrade_config = True
 
     patch_config(config_version)
