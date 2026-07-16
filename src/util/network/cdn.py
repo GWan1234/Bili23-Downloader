@@ -75,4 +75,3 @@ class CDN:
             config.set(config.cn_cdn_server_list, cdn_list)
         else:
             config.set(config.ov_cdn_server_list, cdn_list)
-    

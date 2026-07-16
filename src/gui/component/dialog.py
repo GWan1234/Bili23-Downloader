@@ -85,8 +85,10 @@ class DialogBase(Base, MessageBoxBase):
             self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
 
 class FluentWidget(_FluentWidget):
-    def __init__(self, parent = None):
+    def __init__(self, parent_window, parent = None):
         super().__init__(parent)
+
+        self.parent_window = parent_window
 
     def _init_common(self):
         self.setWindowIcon(QIcon(":/bili23/icon/app.svg"))
@@ -95,7 +97,7 @@ class FluentWidget(_FluentWidget):
         self.setStayOnTop(config.get(config.stay_on_top))
 
     def showEvent(self, event):
-        parent_rect = self.parent().geometry()
+        parent_rect = self.parent_window.geometry()
 
         new_left = parent_rect.left() + (parent_rect.width() - self.size().width()) // 2
         new_top = parent_rect.top() + (parent_rect.height() - self.size().height()) // 2

@@ -1,10 +1,75 @@
+# --------- System Version Check ---------
+
+# 低于 Windows 10 1809 的系统不支持 QT 6
+
+import platform
+import ctypes
+import locale
+import sys
+
+
+# 标记经过特殊处理、可在 Windows 7 上运行的 PySide 版本。该版本需要在
+# 创建 QApplication 前禁用 DirectWrite，否则 Qt 文本会显示为方框。
+qt_win7_compatible = False
+
+if platform.system() == "Windows" :
+    def _msw_messagebox(title: str, content: str):
+        ctypes.windll.user32.MessageBoxW(0, content, title, 0 | 0x10)
+
+        from PySide6 import __version__
+
+    def _get_messages(lang_tag):
+        match lang_tag:
+            case "zh_CN" | "zh_SG":
+                return (
+                    "不支持的 Windows 版本",
+                    "本程序需要 Windows 10 1809 (Build 17763) 及更高版本才能运行。\n请升级系统或使用 Windows 7 兼容版。"
+                )
+
+            case "zh_TW" | "zh_HK" | "zh_MO":
+                return (
+                    "不支援的 Windows 版本",
+                    "本程式需要 Windows 10 1809 (Build 17763) 及更高版本才能執行。\n請升級系統或使用 Windows 7 相容版。"
+                )
+
+            case _:
+                return (
+                    "Unsupported Windows Version",
+                    "This application requires Windows 10 1809 (Build 17763) or later to run.\nPlease upgrade your system or use the Windows 7 compatible version."
+                )
+
+    version = platform.version().split(".")
+    major, minor, build = map(int, version)
+
+    try:
+        from PySide6 import __version_info__
+
+        qt_version = __version_info__
+
+    except ImportError:
+        qt_version = (0, 0, 0, "", "")
+
+    qt_win7_compatible = len(qt_version) > 3 and qt_version[3] == "compatible"
+    
+    # 当系统版本低于 Windows 10 1809 且 QT 版本为 6.x 时，显示不支持的提示并退出程序
+    # 对于 Win7 兼容版，qt_version 中已经带有 compatible 字符串，跳过检测
+
+    if (major, minor, build) < (10, 0, 17763) and qt_version[0] == 6 and qt_version[3] != "compatible":
+        lang_id = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+        lang_tag = locale.windows_locale.get(lang_id, "en_US")
+
+        title, content = _get_messages(lang_tag)
+
+        _msw_messagebox(title, content)
+
+        sys.exit(1)
+
 from PySide6.QtCore import QStandardPaths
 
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 from pathlib import Path
 import logging
-import sys
 import os
 
 # --------- Logging Configuration ---------
@@ -188,8 +253,6 @@ class Application(QApplication):
             self.instance_lock.unlock()
 
         if sys.platform == "win32" and hasattr(self, "app_mutex_handle") and self.app_mutex_handle:
-            import ctypes
-
             ctypes.windll.kernel32.CloseHandle(self.app_mutex_handle)
             self.app_mutex_handle = None
 
@@ -225,11 +288,6 @@ class Application(QApplication):
         cookie_manager.init_cookie_info()
         user_manager.init_user_info()
 
-    def _msw_messagebox(self, title: str, content: str):
-        import ctypes
-
-        ctypes.windll.user32.MessageBoxW(0, content, title, 0 | 0x10)
-
     def _msw_create_mutex(self, name: str):
         import ctypes
         from ctypes import wintypes
@@ -250,7 +308,13 @@ def _main():
         os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
         os.environ["QT_SCALE_FACTOR"] = scaling_value
 
-    app = Application(sys.argv)
+    # Qt 需要在 QApplication 构造时读取平台参数。仅对特殊的 Windows 7
+    # 兼容版自动添加参数，同时尊重用户显式传入的 -platform 选项。
+    app_args = list(sys.argv)
+    if qt_win7_compatible and not any(arg == "-platform" or arg.startswith("-platform=") for arg in app_args):
+        app_args.extend(["-platform", "windows:nodirectwrite"])
+
+    app = Application(app_args)
     app.setup_app()
     
     from gui.interface.main_window import MainWindow

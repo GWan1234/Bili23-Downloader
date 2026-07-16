@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QStackedWidget, QWidget, QHBoxLayout, QGridLayout
+from PySide6.QtWidgets import QStackedWidget, QWidget, QHBoxLayout, QGridLayout, QButtonGroup
 from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtCore import Signal
 
@@ -17,13 +17,16 @@ from util.common.config import config
 class SortFlyoutWidget(FlyoutViewBase):
     closed = Signal()
 
-    def __init__(self, parent = None, sort_by_key_dict: dict = None, trigger_signal_func = None, sort_by_key = None):
+    def __init__(
+        self, parent = None, sort_by_key_dict: dict = None,
+        trigger_signal_func = None, sort_by_key = None, ascending = True
+    ):
         super().__init__(parent)
 
         self.sort_by_key_dict = sort_by_key_dict
         self.trigger_signal_func = trigger_signal_func
         self.sort_by_key = sort_by_key
-        self.ascending = True
+        self.ascending = ascending
 
         self.init_UI()
 
@@ -43,6 +46,16 @@ class SortFlyoutWidget(FlyoutViewBase):
         self.sort_ascending_btn.setToolTip(self.tr("Ascending"))
         self.sort_descending_btn = ToolButton(ExtendedFluentIcon.SORT_REVERSE, self)
         self.sort_descending_btn.setToolTip(self.tr("Descending"))
+
+        self.sort_direction_group = QButtonGroup(self)
+        self.sort_direction_group.setExclusive(True)
+        self.sort_direction_group.addButton(self.sort_ascending_btn)
+        self.sort_direction_group.addButton(self.sort_descending_btn)
+
+        self.sort_ascending_btn.setCheckable(True)
+        self.sort_descending_btn.setCheckable(True)
+        self.sort_ascending_btn.setChecked(self.ascending)
+        self.sort_descending_btn.setChecked(not self.ascending)
 
         sort_direction_layout = QHBoxLayout()
         sort_direction_layout.setContentsMargins(0, 0, 0, 0)
@@ -194,6 +207,7 @@ class TopStackedWidget(QStackedWidget):
             sort_by_key_dict,
             signal_bus.download.sort_downloading_list.emit,
             self.download_interface.downloading_list_view.sort_by_key,
+            self.download_interface.downloading_list_view.sort_ascending,
             self.sort_downloading_list_btn
         )
 
@@ -208,11 +222,12 @@ class TopStackedWidget(QStackedWidget):
             sort_by_key_dict,
             signal_bus.download.sort_completed_list.emit,
             self.download_interface.completed_list_view.sort_by_key,
+            self.download_interface.completed_list_view.sort_ascending,
             self.sort_completed_list_btn
         )
 
-    def _show_sort_flyout(self, sort_by_key_dict, trigger_signal_func, sort_by_key, target):
-        view = SortFlyoutWidget(self, sort_by_key_dict, trigger_signal_func, sort_by_key)
+    def _show_sort_flyout(self, sort_by_key_dict, trigger_signal_func, sort_by_key, ascending, target):
+        view = SortFlyoutWidget(self, sort_by_key_dict, trigger_signal_func, sort_by_key, ascending)
 
         flyout = Flyout.make(
             view = view,

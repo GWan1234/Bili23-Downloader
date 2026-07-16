@@ -46,9 +46,9 @@ class FFmpegCommand:
                 .add_param("-map", "2:v:0")
                 .add_param("-c:v", "copy")
                 .add_param("-c:a", "copy")
-                .add_param("-c:v:1", "mjpeg")
+                .add_param("-c:v:1", "png")
                 .add_param("-disposition:v:1", "attached_pic")
-                .add_param("-pix_fmt:v:1", "yuvj420p")
+                .add_param("-pix_fmt:v:1", "rgba")
                 .add_output(output_path)
             )
         
@@ -75,9 +75,9 @@ class FFmpegCommand:
                 .add_param("-c:a", "copy")
                 .add_param("-map", "1:v:0")
                 .add_param("-map", "0:v:0")
-                .add_param("-c:v:1", "mjpeg")
+                .add_param("-c:v:1", "png")
                 .add_param("-disposition:v:1", "attached_pic")
-                .add_param("-pix_fmt:v:1", "yuvj420p")
+                .add_param("-pix_fmt:v:1", "rgba")
                 .add_output(output_path)
             )
         else:

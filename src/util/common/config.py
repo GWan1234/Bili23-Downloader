@@ -290,8 +290,8 @@ class DefaultValue:
 class APPConfig(QConfig):
     # APP
     app_name = "Bili23 Downloader"
-    app_version = "2.10.4"
-    app_comparable_version = "2.10.4"
+    app_version = "2.11.0"
+    app_comparable_version = "2.11.0"
     app_config_version = 2100
     config_version = ConfigItem("Application", "config_version", app_config_version)
 
@@ -309,6 +309,11 @@ class APPConfig(QConfig):
     auto_select_mode = OptionsConfigItem("Behavior", "auto_select_mode_", AutoSelectMode.CONDITIONAL, OptionsValidator(AutoSelectMode), EnumSerializer(AutoSelectMode))
     auto_select_conditions = ConfigItem("Behavior", "auto_select_conditions", DefaultValue.auto_select_conditions)
     parse_history = ConfigItem("Behavior", "parse_history", True, BoolValidator())
+
+    downloading_list_sort_by = OptionsConfigItem("Behavior", "downloading_list_sort_by", "created_time", OptionsValidator(["created_time", "show_title", "file_size", "progress"]))
+    downloading_list_sort_ascending = ConfigItem("Behavior", "downloading_list_sort_ascending", True, BoolValidator())
+    completed_list_sort_by = OptionsConfigItem("Behavior", "completed_list_sort_by", "completed_time",OptionsValidator(["completed_time", "show_title", "file_size"]))
+    completed_list_sort_ascending = ConfigItem("Behavior", "completed_list_sort_ascending", True, BoolValidator())
 
     silent_start = ConfigItem("Behavior", "silent_start", False, BoolValidator())
     stay_on_top = ConfigItem("Behavior", "stay_on_top", False, BoolValidator())
@@ -399,7 +404,6 @@ class APPConfig(QConfig):
     is_expired = False
 
     # Application
-    should_upgrade_config = False
     accepted_terms = ConfigItem("Application", "accepted_terms", False, BoolValidator())
     skip_version = ConfigItem("Application", "skip_version", "")
 
@@ -485,7 +489,5 @@ need_patch, config_version = check_need_patch()
 
 if need_patch:
     logger.info("检测到旧版本配置文件，正在进行修补")
-
-    config.should_upgrade_config = True
 
     patch_config(config_version)

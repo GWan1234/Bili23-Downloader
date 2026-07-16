@@ -22,6 +22,9 @@ class DownloadListModel(CoverQueryModelBase):
         self._sorting = False
         self._sort_by_key = None
         self._ascending = True
+        self._row_by_task_id: dict[str, int] = {}
+
+        self._rebuild_row_index()
 
     def _get_task_id(self, task_info: TaskInfo):
         return task_info.Basic.task_id
@@ -29,6 +32,12 @@ class DownloadListModel(CoverQueryModelBase):
     def _applyCurrentSort(self):
         if self._sorting and self._sort_by_key:
             self.sortBy(self._sort_by_key, self._ascending)
+
+    def _rebuild_row_index(self):
+        self._row_by_task_id = {
+            task_info.Basic.task_id: row
+            for row, task_info in enumerate(self._task_list)
+        }
 
     def rowCount(self, parent = QModelIndex()):
         return len(self._task_list)
@@ -47,13 +56,7 @@ class DownloadListModel(CoverQueryModelBase):
                 return task_info
     
     def getRow(self, task_info: TaskInfo):
-        task_id = self._get_task_id(task_info)
-
-        for row, item in enumerate(self._task_list):
-            if item.Basic.task_id == task_id:
-                return row
-
-        return -1
+        return self._row_by_task_id.get(self._get_task_id(task_info), -1)
 
     def appendRow(self, task_info: TaskInfo):
         row = self.rowCount()
@@ -63,6 +66,8 @@ class DownloadListModel(CoverQueryModelBase):
         self._task_list.append(task_info)
 
         self.endInsertRows()
+
+        self._row_by_task_id[task_info.Basic.task_id] = row
 
         self._applyCurrentSort()
 
@@ -77,6 +82,9 @@ class DownloadListModel(CoverQueryModelBase):
         self._task_list.extend(task_info_list)
 
         self.endInsertRows()
+
+        for row, task_info in enumerate(self._task_list):
+            self._row_by_task_id[task_info.Basic.task_id] = row
 
         self._applyCurrentSort()
 
@@ -96,6 +104,8 @@ class DownloadListModel(CoverQueryModelBase):
             del self._task_list[row]
 
             self.endRemoveRows()
+
+            self._rebuild_row_index()
 
             return True
         
@@ -224,7 +234,7 @@ class DownloadListModel(CoverQueryModelBase):
         # 判断指定行是否在可见区域内
         view: QAbstractItemView = self.parent()
 
-        if view:
+        if view and view.isVisible():
             viewport = view.viewport()
             item_rect = view.visualRect(self.index(row))
 
@@ -289,6 +299,8 @@ class DownloadListModel(CoverQueryModelBase):
                 self._task_list.sort(key = lambda x: x.Download.progress, reverse = reverse)
 
         self.layoutChanged.emit()
+
+        self._rebuild_row_index()
 
         self.updateRows(0, self.rowCount() - 1)
 

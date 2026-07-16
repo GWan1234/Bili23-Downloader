@@ -1,8 +1,8 @@
 from PySide6.QtCore import QObject, Slot, Signal
 
-from ...network.request import RequestType, ResponseType, SyncNetWorkRequest
+from ...network.request import SyncNetWorkRequest
+from ...network.download_url import resolve_download_url
 from ...common.enum import MediaType
-from ...network.cdn import CDN
 
 from .info import PreviewerInfo
 
@@ -54,36 +54,10 @@ class QueryInfoWorker(QObject):
         self.get_mp4_file_size(query_url)
 
     def get_dash_file_size(self, download_urls: list):
-        download_urls = CDN.get_url_list(download_urls)
+        result = resolve_download_url(download_urls, min_file_size = 10240)
+        self.file_size = result["file_size"]
 
-        for url in download_urls:
-            try:
-                request = SyncNetWorkRequest(url, request_type = RequestType.HEAD, response_type = ResponseType.HEADERS, raise_for_status = True)
-                response = request.run()
-            except:
-                # 请求失败，继续尝试下一个链接
-                continue
-            
-            content_length = response.get("Content-Length")
-            content_type = response.get("Content-Type")
-
-            if content_type is None or "text" in content_type:
-                # 链接不可用
-                continue
-            
-            if content_length is None or not str(content_length).isdigit():
-                # 无法获取有效的文件大小
-                continue
-
-            self.file_size = int(content_length)
-
-            if self.file_size <= 10240:
-                # 如果文件极小（例如某些 CDN 拦截时返回的 1KB 左右错误文本），视为无效链接跳过
-                continue
-
-            break
-
-        return int(content_length)
+        return self.file_size
 
     def get_mp4_file_size(self, query_url: str):
         request = SyncNetWorkRequest(query_url)
@@ -123,4 +97,3 @@ class QueryInfoWorker(QObject):
 
             case "cheese":
                 return response["data"]["durl"]
-            

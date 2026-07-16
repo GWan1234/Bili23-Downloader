@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QModelIndex
+from PySide6.QtCore import Qt, QModelIndex, QTimer
 
 from qfluentwidgets import TreeView, RoundMenu, Action, FluentIcon, isDarkTheme, setCustomStyleSheet
 
@@ -13,6 +13,7 @@ from util.common.config import config
 from util.parse.episode.tree import TreeItem, Attribute
 
 from typing import List
+from collections import deque
 import webbrowser
 
 class ParseTreeView(TreeView):
@@ -22,6 +23,12 @@ class ParseTreeView(TreeView):
         self.main_window = main_window
 
         self._model = ParseModel(parent = self)
+        self._expand_timer = QTimer(self)
+        self._expand_timer.setSingleShot(True)
+        self._expand_timer.timeout.connect(self._expand_next_batch)
+        self._expand_queue = deque()
+        self._expand_callback = None
+        self._expand_batch_size = 100
 
         self.setModel(self._model)
         self.setUniformRowHeights(True)
@@ -40,7 +47,7 @@ class ParseTreeView(TreeView):
             self.setColumnWidth(index, entry["width"])
 
         # 重新展开
-        self.expandAll()
+        self._schedule_expand_all()
 
         header = self.header()
         header.setStretchLastSection(False)
@@ -50,10 +57,46 @@ class ParseTreeView(TreeView):
         self._model.root_node = root_node
         self._model.endResetModel()
 
-        self.expandAll()
+        self._schedule_expand_all(
+            lambda: self.locate_to_item_by_episode_data(current_episode_data)
+        )
 
-        # 根据传入的剧集数据定位到对应的项目
-        self.locate_to_item_by_episode_data(current_episode_data)
+    def _schedule_expand_all(self, callback = None):
+        self._expand_queue.clear()
+        self._expand_queue.append(QModelIndex())
+        self._expand_callback = callback
+
+        if not self._expand_timer.isActive():
+            self._expand_timer.start(0)
+
+    def _expand_next_batch(self):
+        processed = 0
+
+        while self._expand_queue and processed < self._expand_batch_size:
+            parent = self._expand_queue.popleft()
+            rows = self._model.rowCount(parent)
+
+            for row in range(rows):
+                index = self._model.index(row, 0, parent)
+                if not index.isValid():
+                    continue
+
+                self.expand(index)
+                self._expand_queue.append(index)
+                processed += 1
+
+                if processed >= self._expand_batch_size:
+                    break
+
+        if self._expand_queue:
+            self._expand_timer.start(0)
+            return
+
+        callback = self._expand_callback
+        self._expand_callback = None
+
+        if callback:
+            callback()
 
     def clear_tree(self):
         invisible_root = TreeItem({"number": "", "title": ""})
@@ -170,9 +213,7 @@ class ParseTreeView(TreeView):
 
         item.set_attribute(Attribute.DOWNLOAD_AS_SINGLE_VIDEO_BIT)
 
-        signal_bus.download.create_task.emit([item.to_dict()])
-
-        signal_bus.toast.show.emit(ToastNotificationCategory.SUCCESS, "", self.tr("Added to download queue"))
+        signal_bus.download.create_task.emit([item.to_dict()], True)
 
     def search_keywords(self, keywords: str = None):
         if not keywords:
@@ -185,15 +226,14 @@ class ParseTreeView(TreeView):
         self._model.layoutAboutToBeChanged.emit()
         self._model.layoutChanged.emit()
 
-        self.expandAll()
-            
-        # 在 TreeItem 中递归处理数据层搜索
         matched_items = self._model.root_node.search_items(keywords)
 
-        # 滚动并定位到第一个匹配的节点
-        if matched_items:
-            self.scroll_to_item(matched_items[0])
+        self._schedule_expand_all(
+            lambda: self.scroll_to_item(matched_items[0])
+            if matched_items else None
+        )
 
+        # 滚动并定位到第一个匹配的节点
         return matched_items
 
     def scroll_to_item(self, item: TreeItem):

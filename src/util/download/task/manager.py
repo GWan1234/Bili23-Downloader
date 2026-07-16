@@ -1,5 +1,5 @@
+from ...common.enum import DownloadStatus, DownloadType, NumberingType, DuplicateDownloadResolution, ToastNotificationCategory
 from ...common.data import reversed_video_quality_map, reversed_audio_quality_map, video_codec_str_map
-from ...common.enum import DownloadStatus, DownloadType, NumberingType, DuplicateDownloadResolution
 from ...common._json import json_dumps, json_loads
 from ...common.timestamp import get_timestamp_ms
 from ...common.translator import Translator
@@ -16,10 +16,11 @@ from .reparse_worker import ReparseWorker
 from .db import TaskDatabase
 from .info import TaskInfo
 
-from threading import Event
+from threading import Event, Lock, Timer
 from pathlib import Path
 from typing import List
 from uuid import uuid4
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import hashlib
 import re
@@ -29,11 +30,38 @@ logger = logging.getLogger(__name__)
 class TaskManager:
     def __init__(self):
         self.db_manager = TaskDatabase()
+        self._add_to_queue_toast_shown = False
+        self._add_to_queue_toast_lock = Lock()
+        self._update_lock = Lock()
+        self._pending_updates = {}
+        self._update_flush_scheduled = False
+        self._update_executor = ThreadPoolExecutor(max_workers = 1, thread_name_prefix = "task-db")
 
         signal_bus.download.create_task.connect(self._create_async)
 
-    def _create_async(self, episode_info_list: List[dict]):
-        GlobalThreadPoolTask.run_func(self.create, episode_info_list)
+    def _create_async(self, episode_info_list: List[dict], show_toast: bool = False):
+        GlobalThreadPoolTask.run_func(self.create, episode_info_list, show_toast)
+
+    def _show_add_to_queue_toast(self):
+        with self._add_to_queue_toast_lock:
+            if self._add_to_queue_toast_shown:
+                return
+
+            self._add_to_queue_toast_shown = True
+
+        signal_bus.toast.show.emit(
+            ToastNotificationCategory.SUCCESS,
+            "",
+            Translator.TIP_MESSAGES("ADDED_TO_DOWNLOAD_QUEUE")
+        )
+
+        timer = Timer(3, self._reset_add_to_queue_toast_flag)
+        timer.daemon = True
+        timer.start()
+
+    def _reset_add_to_queue_toast_flag(self):
+        with self._add_to_queue_toast_lock:
+            self._add_to_queue_toast_shown = False
 
     def __episode_info_to_task_info(self, episode_info: dict, number) -> TaskInfo:
         task_info = TaskInfo()
@@ -122,9 +150,9 @@ class TaskManager:
         task_info.File.name = str(path.name)
         task_info.File.folder = str(path.parent)
 
-    def __check_reparse_needed(self, episode_info: dict):
+    def __check_reparse_needed(self, episode_info: dict, show_toast: bool = False):
         if episode_info.get("attribute", 0) & Attribute.NEED_PARSE_BIT:
-            worker = ReparseWorker(episode_info)
+            worker = ReparseWorker(episode_info, show_toast)
             GlobalThreadPoolTask.run(worker)
 
             return True
@@ -165,34 +193,60 @@ class TaskManager:
             case _:
                 return episode_info.get("number", "")
 
-    def create(self, episode_info_list: List[dict]):
+    def create(self, episode_info_list: List[dict], show_toast: bool = False):
         task_info_list = []
 
         for episode_info in episode_info_list:
-            # 判断是否需要重新解析
-            if self.__check_reparse_needed(episode_info):
-                continue
+            try:
+                # 判断是否需要重新解析
+                if self.__check_reparse_needed(episode_info, show_toast):
+                    continue
 
-            # 判断是否重复下载
-            if self._check_duplicate(episode_info):
-                continue
+                # 判断是否重复下载
+                if self._check_duplicate(episode_info):
+                    continue
 
-            # 先判断重复下载，再分配编号
-            number = self.__get_number(episode_info)
+                # 先判断重复下载，再分配编号
+                number = self.__get_number(episode_info)
 
-            task_info = self.__episode_info_to_task_info(episode_info, number)
+                task_info = self.__episode_info_to_task_info(episode_info, number)
 
-            task_info_list.append(task_info)
+                task_info_list.append(task_info)
 
-            # 全局起始编号自增
-            config.global_starting_number += 1
+                # 全局起始编号自增
+                config.global_starting_number += 1
+
+            except Exception as error:
+                title = episode_info.get("title", "")
+                logger.exception("创建下载任务失败：%s", title)
+
+                signal_bus.toast.show_long_message.emit(
+                    ToastNotificationCategory.ERROR,
+                    Translator.ERROR_MESSAGES("DOWNLOAD_FAILED"),
+                    f"{title}\n\n{error}"
+                )
 
         if task_info_list:
             # 存储到数据库，并添加到下载列表
-            self.db_manager.add_tasks(task_info_list)
+            try:
+                self.db_manager.add_tasks(task_info_list)
+
+            except Exception as error:
+                logger.exception("保存下载任务失败")
+
+                signal_bus.toast.show_long_message.emit(
+                    ToastNotificationCategory.ERROR,
+                    Translator.ERROR_MESSAGES("DOWNLOAD_FAILED"),
+                    str(error)
+                )
+
+                return
 
             signal_bus.download.add_to_downloading_list.emit(task_info_list)
             signal_bus.download.auto_manage_concurrent_downloads.emit()
+
+            if show_toast:
+                self._show_add_to_queue_toast()
 
     def query(self, completed: bool = False) -> List[TaskInfo]:
         result = self.db_manager.query_tasks(completed)
@@ -210,9 +264,45 @@ class TaskManager:
         return task_info_list
 
     def update(self, task_info: TaskInfo):
-        self.db_manager.update_task(task_info)
+        self.update_async(task_info)
+
+    def update_async(self, task_info: TaskInfo):
+        # 高频进度更新只保留每个任务最新快照，并由单独线程串行写入数据库。
+        task_id = task_info.Basic.task_id
+        data = json_dumps(task_info.to_dict())
+
+        with self._update_lock:
+            self._pending_updates[task_id] = (task_id, data)
+
+            if self._update_flush_scheduled:
+                return
+
+            self._update_flush_scheduled = True
+
+        self._update_executor.submit(self._flush_updates)
+
+    def _wait_for_pending_updates(self):
+        # 结构性操作前等待已提交的快照完成，避免旧状态覆盖新记录。
+        self._update_executor.submit(lambda: None).result()
+
+    def _flush_updates(self):
+        while True:
+            with self._update_lock:
+                if not self._pending_updates:
+                    self._update_flush_scheduled = False
+                    return
+
+                updates = list(self._pending_updates.values())
+                self._pending_updates.clear()
+
+            for task_id, data in updates:
+                try:
+                    self.db_manager.update_task_json(task_id, data)
+                except Exception:
+                    logger.exception("异步保存下载任务失败：%s", task_id)
 
     def delete(self, task_info: TaskInfo, completed: bool = False):
+        self._wait_for_pending_updates()
         self.db_manager.delete_task(task_info.Basic.task_id, completed)
 
     def cancel(self, task_info: TaskInfo):
@@ -241,6 +331,7 @@ class TaskManager:
         self._removeTemporaryFiles(task_info)
 
     def recreate(self, task_info: TaskInfo):
+        self._wait_for_pending_updates()
         self.db_manager.delete_task(task_info.Basic.task_id, completed = True)
         self.db_manager.add_tasks([task_info])
 

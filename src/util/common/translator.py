@@ -253,6 +253,7 @@ class Translator:
             "FFMPEG_FAILED": translate("ERROR_MESSAGES", "An error occurred while running FFmpeg"),
             "FFMPEG_FAILED_WITH_CODE": translate("ERROR_MESSAGES", "FFmpeg failed with exit code {code}"),
             "FILE_NOT_FOUND": translate("ERROR_MESSAGES", "The specified file or folder does not exist, you may need to download it again."),
+            "FILE_NOT_FOUND_TITLE": translate("ERROR_MESSAGES", "File Not Found"),
             "FILE_NOT_FOUND_DETAIL": translate("ERROR_MESSAGES", "The file may have been moved or deleted. Please download it again."),
             "INSUFFICIENT_SPACE": translate("ERROR_MESSAGES", "Insufficient disk space, please free up enough space and try again."),
             "PERMISSION_DENIED": translate("ERROR_MESSAGES", "Permission denied: cannot write to file"),
@@ -265,6 +266,9 @@ class Translator:
             "PARSE_FAILED": translate("ERROR_MESSAGES", "Failed to parse download information"),
             "MEDIA_INFO_FAILED": translate("ERROR_MESSAGES", "Failed to retrieve media information"),
             "LOGIN_EXPIRED": translate("ERROR_MESSAGES", "Login status expired"),
+            "COOKIE_FORMAT_INVALID": translate("ERROR_MESSAGES", "Invalid Cookies format"),
+            "COOKIE_MISSING_SESSDATA": translate("ERROR_MESSAGES", "SESSDATA field not found in the pasted Cookies"),
+            "COOKIE_INVALID": translate("ERROR_MESSAGES", "Cookies are invalid or expired"),
             "LOGIN_EXPIRED_MESSAGE": translate("ERROR_MESSAGES", "Your account login status has expired. Please log in again."),
             "USER_INFO_FAILED": translate("ERROR_MESSAGES", "Failed to retrieve user information"),
             "USER_AVATAR_FAILED": translate("ERROR_MESSAGES", "Failed to retrieve user avatar"),
@@ -305,6 +309,7 @@ class Translator:
             "PARSING_PAGE": translate("TIP_MESSAGES", "Parsing page {page}, total {total_page} pages, progress: {progress}%"),
             "PARSING_LINK": translate("TIP_MESSAGES", "Parsing link {link}, total {total_links} links, progress: {progress}%"),
             "MEDIA_INFO_UPDATED": translate("TIP_MESSAGES", "Media info updated"),
+            "ADDED_TO_DOWNLOAD_QUEUE": translate("TIP_MESSAGES", "Added to download queue"),
         }
 
     @staticmethod

@@ -12,7 +12,7 @@ from util.thread.async_ import AsyncTask
 
 class ViewCoverDialog(FluentWidget):
     def __init__(self, cover_url: str, parent = None):
-        super().__init__(parent)
+        super().__init__(parent_window = parent)
 
         self.setWindowTitle(self.tr("Cover"))
         self.resize(650, 360)

@@ -8,6 +8,7 @@ from .time import Time
 
 from pathlib import Path
 from typing import List
+import re
 import logging
 
 logger = logging.getLogger(__name__)
@@ -50,24 +51,36 @@ class FileNameFormatter:
             if self.attribute:
                 self.rule = self.get_special_rule()
 
-            return self.__normalize_path(self.rule.format(**self.variable_data))
+            safe_variable_data = {
+                name: self.__sanitize_component(value)
+                for name, value in self.variable_data.items()
+            }
+
+            return self.__normalize_path(self.rule.format(**safe_variable_data))
         
         except Exception as e:
             logger.exception(f"格式化文件名时发生错误")
 
             return None
 
+    @staticmethod
+    def __sanitize_component(value):
+        if not isinstance(value, str):
+            return value
+
+        return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", value)
+
     def __normalize_path(self, path_str: str):
         if not path_str:
             return path_str
         
-        path_str = path_str.removeprefix("/").removeprefix("\\")
+        path_str = path_str.lstrip("/\\")
 
         path = Path(path_str)
         normalized_parts = []
 
         for part in path.parts:
-            cleaned_part = part.strip(" .")
+            cleaned_part = part.lstrip("/\\").strip(" .")
 
             if cleaned_part:
                 normalized_parts.append(cleaned_part)
@@ -103,6 +116,15 @@ class FileNameFormatter:
                 return entry["rule"]
 
     def get_variable_data_from_task_info(self, task_info: TaskInfo):
+        number = task_info.Episode.number
+
+        try:
+            number = int(number)
+        except (TypeError, ValueError):
+            # “使用解析列表序号”时，某些分类的序号是文本标签。
+            # 普通命名规则仍应允许这些条目创建下载任务。
+            pass
+
         return {
             "pub_time": Time.from_timestamp(task_info.Episode.pubtime),
             "pub_ts": task_info.Episode.pubtime,
@@ -112,7 +134,7 @@ class FileNameFormatter:
             "fav_ts": task_info.Episode.favtime,
             "last_watched_time": Time.from_timestamp(task_info.Episode.viewtime),
             "last_watched_ts": task_info.Episode.viewtime,
-            "number": int(task_info.Episode.number),
+            "number": number,
             "uploader": task_info.Episode.uploader,
             "uploader_uid": task_info.Episode.uploader_uid,
             "video_quality": task_info.Episode.video_quality,

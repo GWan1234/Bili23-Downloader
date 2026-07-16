@@ -17,6 +17,7 @@
         <file>icon/light/select.svg</file>
         <file>icon/light/rename.svg</file>
         <file>icon/light/server.svg</file>
+        <file>icon/light/remove.svg</file>
         <file>icon/light/comment.svg</file>
         <file>icon/light/options.svg</file>
         <file>icon/light/numbers.svg</file>
@@ -25,6 +26,7 @@
         <file>icon/light/subtitles.svg</file>
         <file>icon/light/clipboard.svg</file>
         <file>icon/light/test_cube.svg</file>
+        <file>icon/light/edit_black.svg</file>
         <file>icon/light/select_all.svg</file>
         <file>icon/light/automation.svg</file>
         <file>icon/light/choose_page.svg</file>
@@ -49,6 +51,7 @@
         <file>icon/dark/select.svg</file>
         <file>icon/dark/rename.svg</file>
         <file>icon/dark/server.svg</file>
+        <file>icon/dark/remove.svg</file>
         <file>icon/dark/comment.svg</file>
         <file>icon/dark/options.svg</file>
         <file>icon/dark/numbers.svg</file>
@@ -57,6 +60,7 @@
         <file>icon/dark/subtitles.svg</file>
         <file>icon/dark/clipboard.svg</file>
         <file>icon/dark/test_cube.svg</file>
+        <file>icon/dark/edit_black.svg</file>
         <file>icon/dark/select_all.svg</file>
         <file>icon/dark/automation.svg</file>
         <file>icon/dark/choose_page.svg</file>

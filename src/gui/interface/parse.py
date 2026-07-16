@@ -25,6 +25,7 @@ from util.parse.preview.info import PreviewerInfo
 
 from util.misc.history import history_manager
 from util.thread.async_ import AsyncTask
+from util.thread.pool import GlobalThreadPoolTask
 
 from collections import deque
 from threading import Event
@@ -210,6 +211,8 @@ class ParseBase(QFrame):
             self.start_progress_parse_worker(dialog.payload)
 
     def show_auto_parse_teaching_tip(self: "ParseInterface"):
+        config.set(config.auto_parse_teaching_tip_shown, True)
+
         TeachingTip.create(
             target = self.segmented_widget.pager_widget.menu_btn,
             title = self.tr("Auto-parse Pagination"),
@@ -473,7 +476,7 @@ class ParseInterface(ParseBase):
         self.parse_list.update_tree(root_node, current_episode_data)
 
         if config.get(config.parse_history):
-            history_manager.add_history(title, self.url_box.text(), category_name)
+            GlobalThreadPoolTask.run_func(history_manager.add_history, title, self.url_box.text(), category_name)
 
     def on_download(self):
         # 只有在获取媒体信息成功时才允许下载
@@ -494,9 +497,7 @@ class ParseInterface(ParseBase):
         config.current_starting_number = 1
 
         # 添加到下载队列
-        signal_bus.download.create_task.emit(checked_episodes_list)
-
-        signal_bus.toast.show.emit(ToastNotificationCategory.SUCCESS, "", self.tr("Added to download queue"))
+        signal_bus.download.create_task.emit(checked_episodes_list, True)
 
         QTimer.singleShot(0, self.parse_list.update_check_state)
 

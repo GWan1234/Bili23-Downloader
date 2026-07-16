@@ -1,4 +1,4 @@
-from ..enum import ConventionType
+from ..enum import ConventionType, VariableType
 
 convention_type_map = {
     "NORMAL": ConventionType.NORMAL,
@@ -66,61 +66,71 @@ class VariableListFactory:
                 "name": "pub_time",
                 "variable": "{pub_time:%Y-%m-%d_%H-%M-%S}",
                 "description": "PUB_TIME",
-                "example": "2026-03-07_12-00-00"
+                "example": "2026-03-07_12-00-00",
+                "type": VariableType.DATETIME
             },
             {
                 "name": "pub_ts",
                 "variable": "{pub_ts}",
                 "description": "PUB_TS",
-                "example": "1772841600"
+                "example": "1772841600",
+                "type": VariableType.TEXT
             },
             {
                 "name": "create_time",
                 "variable": "{create_time:%Y-%m-%d_%H-%M-%S}",
                 "description": "CREATE_TIME",
-                "example": "2026-03-07_12-00-00"
+                "example": "2026-03-07_12-00-00",
+                "type": VariableType.DATETIME
             },
             {
                 "name": "create_ts",
                 "variable": "{create_ts}",
                 "description": "CREATE_TS",
-                "example": "1772841600"
+                "example": "1772841600",
+                "type": VariableType.TEXT
             },
             {
                 "name": "number",
                 "variable": "{number}",
                 "description": "NUMBER",
-                "example": 1
+                "example": 1,
+                "type": VariableType.NUMBER
             },
             {
                 "name": "uploader",
                 "variable": "{uploader}",
                 "description": "UPLOADER",
-                "example": "UP主昵称"
+                "example": "UP主昵称",
+                "type": VariableType.TEXT
             },
             {
                 "name": "uploader_uid",
                 "variable": "{uploader_uid}",
                 "description": "UPLOADER_UID",
-                "example": "12345678"
+                "example": "12345678",
+                "type": VariableType.TEXT
             },
             {
                 "name": "video_quality",
                 "variable": "{video_quality}",
                 "description": "VIDEO_QUALITY",
-                "example": "1080P"
+                "example": "1080P",
+                "type": VariableType.TEXT
             },
             {
                 "name": "audio_quality",
                 "variable": "{audio_quality}",
                 "description": "AUDIO_QUALITY",
-                "example": "192K"
+                "example": "192K",
+                "type": VariableType.TEXT
             },
             {
                 "name": "video_codec",
                 "variable": "{video_codec}",
                 "description": "VIDEO_CODEC",
-                "example": "HEVC"
+                "example": "HEVC",
+                "type": VariableType.TEXT
             }
         ]
     

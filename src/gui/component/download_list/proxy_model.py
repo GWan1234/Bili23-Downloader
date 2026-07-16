@@ -1,10 +1,11 @@
-from PySide6.QtCore import QModelIndex, Qt, QSortFilterProxyModel
+from PySide6.QtCore import QModelIndex, Qt, QSortFilterProxyModel, QTimer
 from PySide6.QtWidgets import QAbstractItemView
 
 from util.download.task.info import TaskInfo
 from util.common.signal_bus import signal_bus
 
 from .model import DownloadListModel
+
 
 class DownloadListProxyModel(QSortFilterProxyModel):
     def __init__(self, parent = None):
@@ -16,8 +17,14 @@ class DownloadListProxyModel(QSortFilterProxyModel):
 
         self._filter_text = ""
         self._status_filter = None
+        self._filter_refresh_pending = False
+        self._sort_refresh_pending = False
 
-        self.setDynamicSortFilter(True)
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.timeout.connect(self._flushPendingRefresh)
+
+        self.setDynamicSortFilter(False)
 
     def sourceModel(self) -> DownloadListModel:
         return super().sourceModel()
@@ -55,6 +62,27 @@ class DownloadListProxyModel(QSortFilterProxyModel):
             return False
 
         return self._matchesFilter(task_info)
+
+    def _scheduleRefresh(self, refresh_filter = False, refresh_sort = False):
+        self._filter_refresh_pending |= refresh_filter
+        self._sort_refresh_pending |= refresh_sort
+
+        if not self._refresh_timer.isActive():
+            self._refresh_timer.start(50)
+
+    def _flushPendingRefresh(self):
+        refresh_filter = self._filter_refresh_pending
+        refresh_sort = self._sort_refresh_pending
+
+        self._filter_refresh_pending = False
+        self._sort_refresh_pending = False
+
+        if refresh_filter:
+            self.invalidateFilter()
+
+        if refresh_sort and self._sorting and self._sort_by_key:
+            order = Qt.SortOrder.AscendingOrder if self._ascending else Qt.SortOrder.DescendingOrder
+            self.sort(0, order)
 
     def lessThan(self, left: QModelIndex, right: QModelIndex):
         left_task: TaskInfo = left.data(Qt.ItemDataRole.UserRole)
@@ -222,21 +250,22 @@ class DownloadListProxyModel(QSortFilterProxyModel):
         signal_bus.download.update_downloading_item.connect(self.onUpdateData)
 
     def onUpdateData(self, task_info: TaskInfo):
-        self.invalidateFilter()
-
         row = self.getRow(task_info)
 
-        if row == -1:
-            return
-
-        if self.isRowInVisibleArea(row):
+        if row != -1 and self.isRowInVisibleArea(row):
             model_index = self.index(row, 0)
             self.dataChanged.emit(model_index, model_index)
+
+        if self._filter_text or self._status_filter:
+            self._scheduleRefresh(refresh_filter = True)
+
+        if self._sort_by_key in {"file_size", "progress"}:
+            self._scheduleRefresh(refresh_sort = True)
 
     def isRowInVisibleArea(self, row: int):
         view: QAbstractItemView = self.parent()
 
-        if view:
+        if view and view.isVisible():
             viewport = view.viewport()
             item_rect = view.visualRect(self.index(row, 0))
 
@@ -255,22 +284,22 @@ class DownloadListProxyModel(QSortFilterProxyModel):
 
         self.sort(0, order)
 
-    def enableSorting(self, default_key: str):
+    def enableSorting(self, default_key: str, ascending: bool = True):
         self._sorting = True
         self._sort_by_key = default_key
-        self._ascending = True
+        self._ascending = ascending
 
-        self.sortBy(default_key, True)
+        self.sortBy(default_key, ascending)
 
     def setFilterText(self, text: str):
         self._filter_text = text.strip()
-        self.invalidateFilter()
+        self._scheduleRefresh(refresh_filter = True)
 
     def setStatusFilter(self, statuses):
         self._status_filter = set(statuses) if statuses else None
-        self.invalidateFilter()
+        self._scheduleRefresh(refresh_filter = True)
 
     def clearFilter(self):
         self._filter_text = ""
         self._status_filter = None
-        self.invalidateFilter()
+        self._scheduleRefresh(refresh_filter = True)
