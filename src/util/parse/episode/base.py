@@ -38,6 +38,9 @@ class EpisodeParserBase:
             if attr & Attribute.VIDEO_BIT or attr & Attribute.AUDIO_BIT:
                 title = node.child(0).title
 
+            if attr & Attribute.HISTORY_BIT or attr & Attribute.WATCH_LATER_BIT:
+                title = node.number
+
         if config.get(config.auto_select_mode) == AutoSelectMode.MANUAL:
             current_episode_data = None
 
