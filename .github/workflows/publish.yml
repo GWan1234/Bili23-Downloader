@@ -87,18 +87,40 @@ jobs:
       - name: Install Inno Setup and Chinese language pack
         run: |
           # 安装 Inno Setup
-          Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"
-          Start-Process "is.exe" -Wait -ArgumentList "/VERYSILENT"
+          choco install innosetup --yes --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install Inno Setup (exit code: $LASTEXITCODE)"
+          }
+
+          $inno = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $inno) {
+            throw "ISCC.exe was not found after installing Inno Setup"
+          }
+
+          $languageDir = Join-Path (Split-Path $inno) "Languages"
+          New-Item -ItemType Directory -Path $languageDir -Force | Out-Null
 
           # 简中语言包
-          $lang_zh_cn_url = "https://raw.githubusercontent.com/jrsoftware/issrc/refs/heads/main/Files/Languages/ChineseSimplified.isl"
-          Invoke-WebRequest -Uri $lang_zh_cn_url -OutFile "ChineseSimplified.isl"
-          Move-Item -Path "ChineseSimplified.isl" -Destination "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
+          $lang_zh_cn_url = "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl"
+          $lang_zh_cn_path = Join-Path $languageDir "ChineseSimplified.isl"
+          curl.exe --fail --location --retry 3 --retry-all-errors --output $lang_zh_cn_path $lang_zh_cn_url
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $lang_zh_cn_path)) {
+            throw "Failed to download ChineseSimplified.isl"
+          }
 
           # 繁中语言包
-          $lang_zh_tw_url = "https://raw.githubusercontent.com/jrsoftware/issrc/refs/heads/main/Files/Languages/ChineseTraditional.isl"
-          Invoke-WebRequest -Uri $lang_zh_tw_url -OutFile "ChineseTraditional.isl"
-          Move-Item -Path "ChineseTraditional.isl" -Destination "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseTraditional.isl"
+          $lang_zh_tw_url = "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseTraditional.isl"
+          $lang_zh_tw_path = Join-Path $languageDir "ChineseTraditional.isl"
+          curl.exe --fail --location --retry 3 --retry-all-errors --output $lang_zh_tw_path $lang_zh_tw_url
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $lang_zh_tw_path)) {
+            throw "Failed to download ChineseTraditional.isl"
+          }
+
+          "INNO_COMPILER=$inno" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Prepare Windows 10/11 runtime
         run: |
@@ -121,7 +143,7 @@ jobs:
           # 安装版：使用 Inno Setup 创建安装程序
           Copy-Item -Path "assets\setup.iss" -Destination ".\"
 
-          $inno = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $inno = $env:INNO_COMPILER
           $script = ".\setup.iss"
 
           & $inno "$script"
@@ -158,7 +180,7 @@ jobs:
         run: |
           # 使用 Inno Setup 创建安装程序
 
-          $inno = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $inno = $env:INNO_COMPILER
           $script = ".\setup.iss"
 
           & $inno "$script"
