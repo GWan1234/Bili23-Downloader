@@ -81,8 +81,8 @@ class DownloadListView(ListView):
     def setAutoUpdateCountBadge(self, auto_update: bool):
         self._auto_update_count_badge = auto_update
 
-    def enableSorting(self, default_key: str = None):
-        self._model.enableSorting(default_key)
+    def enableSorting(self, default_key: str = None, ascending: bool = True):
+        self._model.enableSorting(default_key, ascending)
 
     def connectUpdateDataSignal(self):
         self._model.connectUpdateDataSignal()
@@ -201,3 +201,7 @@ class DownloadListView(ListView):
     @property
     def sort_by_key(self):
         return self._model._sort_by_key
+
+    @property
+    def sort_ascending(self):
+        return self._model._ascending

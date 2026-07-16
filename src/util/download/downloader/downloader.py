@@ -12,7 +12,8 @@ from ...common.io.file import File
 
 from ...parse.additional.worker import AdditionalParseWorker
 from ...thread.pool import GlobalThreadPoolTask
-from ...network.request import get_cookies
+from ...network.request import get_cookies, get_mounts
+from ...network.proxy import Proxy
 from ...thread.async_ import AsyncTask
 
 from ..task.manager import task_manager
@@ -595,6 +596,7 @@ class Downloader(QObject):
     def init_session(self):
         limits = httpx.Limits(max_keepalive_connections = config.get(config.download_thread), max_connections = config.get(config.download_thread))
         transport = httpx.HTTPTransport(retries = 5)
+        mounts = get_mounts(Proxy().get_proxies())
 
         headers = {
             "Referer": self.task_info.Episode.url,
@@ -604,6 +606,7 @@ class Downloader(QObject):
         self.session = httpx.Client(
             limits = limits,
             transport = transport,
+            mounts = mounts,
             headers = headers
         )
 
